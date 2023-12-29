@@ -18,4 +18,5 @@
 8. 即可在兩個client端中傳輸訊息
 
 debug
+
 -- ERROR on binding: Address already in use: 更改port即可，因為程式結束該port可能不會馬上被電腦free掉
