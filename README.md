@@ -1,6 +1,6 @@
 使用方法
 
-1. git clone下本repo
+1. git clone此repo
 
 2. 進入此資料夾
 
