@@ -16,3 +16,6 @@
   (在本地的話地址是127.0.0.1，同一個內網不同設備請輸入server的ip位置
   
 8. 即可在兩個client端中傳輸訊息
+
+debug
+-- ERROR on binding: Address already in use: 更改port即可，因為程式結束該port可能不會馬上被電腦free掉
