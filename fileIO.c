@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-
 #define BUFFER_SIZE 256
 
 typedef struct msg{
@@ -19,7 +18,7 @@ Message* MsgRead(char *roomID, int *msgNum) {
      Message *msg = (Message*)malloc(sizeof(Message)), *head = msg;
      msg->next = NULL;
      while (fscanf(fptr,"%[^\n] ",context)!=EOF) {
-          (*msgNum)++;
+          ++(*msgNum);
           msg->next = (Message*)malloc(sizeof(Message));
           snprintf(msg->next->msgContent,BUFFER_SIZE,"%s",context);
           msg->next->next = NULL;
@@ -47,7 +46,7 @@ void MsgWrite(char *roomID,Message *head) {
 }
 
 int main(int argc, char *argv[]) {
-     int count;
+     int count = 0;
      Message *read = MsgRead("1211",&count);
      MsgWrite("1111",read);
      printf("%i\n",count);
