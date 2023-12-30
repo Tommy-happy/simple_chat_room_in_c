@@ -1,7 +1,6 @@
 server-client: server.c client.c
-	gcc server.c -fopenmp -o server
-	gcc client.c -fopenmp -o client
-	# gcc client2.c -fopenmp -o client2
+	gcc server.c -g -fopenmp -o server
+	gcc client.c -lncurses -fopenmp -o client
 
 ncurses:
 	gcc test_ncurses.c -lncurses -o test_ncurses

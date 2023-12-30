@@ -1,5 +1,4 @@
-使用方法
-
+使用方法(server, client)
 1. git clone此repo
 
 2. 進入此資料夾
@@ -16,6 +15,11 @@
   (在本地的話地址是127.0.0.1，同一個內網不同設備請輸入server的ip位置
   
 8. 即可在兩個client端中傳輸訊息
+
+使用方法(test_ncurses)
+1. make ncurses 編譯
+
+2. ./test_ncurses 執行
 
 debug
 
