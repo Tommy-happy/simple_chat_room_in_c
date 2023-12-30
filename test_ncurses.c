@@ -79,8 +79,10 @@ int get_name_room_id(char name[20], char room[5]){
         //     break;
         // }
         else{
-            name[len]=c;
-            name[len+1]='\0';
+            if(len<19){
+                name[len]=c;
+                name[len+1]='\0';
+            }
             len++;    
         }
 
@@ -88,7 +90,6 @@ int get_name_room_id(char name[20], char room[5]){
         mvprintw(row/2-1, (col-17)/2+1, "%s","what\'s your name?");
         if(len==20){
             move(row/2+1, (col-16)/2+1);
-            name[19]='\0';
             printw("name is too long");
             len--;
         }
@@ -98,6 +99,7 @@ int get_name_room_id(char name[20], char room[5]){
         mvprintw(row/2, (col-len)/2, "<%s>",name);
         refresh();
     }
+
 
     char join_room[] = "join room"; //len=9
     char creat_room[] = "create room"; //len=11
@@ -137,7 +139,7 @@ int get_name_room_id(char name[20], char room[5]){
     clear();
     mvprintw(row/2-1, (col-25)/2+1, "%s","please input the room id?");
     move(row/2, (col-len)/2);
-    while( (c = getch()) ){ //輸入名字
+    while( (c = getch()) ){ //輸入room id
         enter = 0;
         if(c == ('G'&0x1f)){ //輸入刪除鍵
             if(len==0){
@@ -158,15 +160,17 @@ int get_name_room_id(char name[20], char room[5]){
             continue;
         }
         else{
-            room[len]=c;
-            room[len+1]='\0';
+            if(len<4){
+                room[len]=c;
+                room[len+1]='\0';
+            }
             len++;    
         }
 
         clear();
         mvprintw(row/2-1, (col-25)/2+1, "%s","please input the room id?");
         if(len==5){
-            room[4]='\0';
+            // room[4]='\0';
             mvprintw(row/2+1, (col-25)/2+1, "no more than four numbers");
             len--;
         }
@@ -176,8 +180,6 @@ int get_name_room_id(char name[20], char room[5]){
         }
         refresh();
     }
-    mvprintw(0, 0, "<%s>",name);
-    refresh();
-    getch();
+
     return is_join;
 }
