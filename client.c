@@ -7,9 +7,13 @@
 #include <netinet/in.h>
 #include <netdb.h> 
 #include <omp.h>
-// #include <curses.h>
+#include <curses.h>
 
 #define BUFFER_SIZE 256
+#define USERNAME_LEN 19
+#define ROOM_ID_LEN 4
+
+int get_name_room_id(char[USERNAME_LEN], char[ROOM_ID_LEN+1]);
 
 void error(const char *msg) { //輸出錯誤訊息
     perror(msg); //輸出msg和stderr的內容
@@ -20,6 +24,7 @@ int main(int argc, char *argv[]) {
     int serverfd /*socket file description*/, portno, n;
     struct sockaddr_in serv_addr; //server地址等資訊
     struct hostent *server;
+    char username[USERNAME_LEN+1], room_id[ROOM_ID_LEN+1], is_join;
 
     char buffer[BUFFER_SIZE];
     if (argc < 3) {
@@ -44,15 +49,31 @@ int main(int argc, char *argv[]) {
 
     if (connect(serverfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0) //連接server並判斷有沒有連接成功
         error("ERROR connecting");
-    
+
+    initscr(); //初始化ncurses視窗
+    noecho(); //輸入時terminal不會顯示字元
+    keypad(stdscr, TRUE); // 启用特殊键盘键输入，如方向键
+    is_join = get_name_room_id(username, room_id); //取得client username、創建或加入房間、room id
+    endwin(); //結束ncurses視窗
+
+    n = write(serverfd,username,strlen(username)); //傳送給server
+    if (n < 0)  error("ERROR writing to socket");
+    printf("sended %s\n", username);
+    sleep(0.1);
+    n = write(serverfd,room_id,strlen(room_id)); //傳送給server
+    if (n < 0)  error("ERROR writing to socket");
+    printf("sended %s\n", room_id);
+
     omp_set_num_threads(2); //設定平行運算thread的數量
     #pragma omp parallel /*開始平行運算*/ sections //根據section平行運算，section1和section2同時進行 
     {
         #pragma omp section //section1
         {    
+            // printf("waiting for you to write something...\n");
             while(fgets(buffer,BUFFER_SIZE-1,stdin)!=NULL){ //讀取std輸入
                 n = write(serverfd,buffer,strlen(buffer)); //傳送給server
                 if (n < 0)  error("ERROR writing to socket");
+                // printf("I wrote something...\n");
             }
         }
         #pragma omp section //section2
@@ -68,4 +89,155 @@ int main(int argc, char *argv[]) {
 
     close(serverfd);
     return 0;
+}
+
+int get_name_room_id(char name[USERNAME_LEN+1], char room_id[ROOM_ID_LEN+1]){
+    int row, col;
+    int len=0;
+    char c;
+    int enter; //有沒有按enter
+    bzero(name, USERNAME_LEN+1);
+    getmaxyx(stdscr, row, col);  //(ncurses)得目前terminal的長和寬
+    mvprintw(row/2-1, (col-17)/2,"%s","what\'s your name?"); //移動並輸出
+    move(row/2, (col-len)/2);
+    while(c = getch()){ //輸入名字
+        int enter=0;
+        if(c == ('G'&0x1f)){ //輸入刪除鍵
+            if(len==0){
+                continue;
+            }
+            name[len-1]='\0';
+            len--;
+        }
+        else if(c=='\n'){
+            if(len>0){
+                break;
+            }
+            else{
+                enter = 1;
+            }
+        }
+        else if(c<32 || 126<c){
+            continue;
+        }
+        // else if(c == ('C'&0x1f)){
+        //     strcpy(name, "you pressed up");
+        //     break;
+        // }
+        // else if(c == ('B'&0x1f)){
+        //     strcpy(name, "you pressed down");
+        //     break;
+        // }
+        // else if(c == ('E'&0x1f)){
+        //     strcpy(name, "you pressed right");
+        //     break;
+        // }
+        // else if(c == ('D'&0x1f)){
+        //     strcpy(name, "you pressed left");
+        //     break;
+        // }
+        else{
+            if(len<USERNAME_LEN){
+                name[len]=c;
+                name[len+1]='\0';
+            }
+            len++;    
+        }
+
+        clear();
+        mvprintw(row/2-1, (col-17)/2+1, "%s","what\'s your name?");
+        if(len==USERNAME_LEN+1){
+            move(row/2+1, (col-16)/2+1);
+            printw("name is too long");
+            len--;
+        }
+        else if(enter){
+            mvprintw(row/2+1, (col-22)/2+1, "please input your name");
+        }
+        mvprintw(row/2, (col-len)/2, "<%s>",name);
+        refresh();
+    }
+
+
+    char join_room[] = "join room"; //len=9
+    char creat_room[] = "create room"; //len=11
+    int is_join=1;
+    clear();
+    mvprintw(row/2, (col-31)/2+1, "%s","I want to ");
+    attrset(A_REVERSE | A_UNDERLINE);
+    mvprintw(row/2, (col-31)/2+1+10, "%s", join_room);
+    attroff(A_REVERSE | A_UNDERLINE);
+    mvprintw(row/2, (col-31)/2+1+19, "/%s", creat_room);
+    while( (c = getch()) != '\n'){ //輸入名字
+        if(c == ('D'&0x1f)){ //press left
+            clear();
+            mvprintw(row/2, (col-31)/2+1, "%s","I want to ");
+            attrset(A_REVERSE | A_UNDERLINE);
+            mvprintw(row/2, (col-31)/2+1+10, "%s", join_room);
+            attroff(A_REVERSE | A_UNDERLINE);
+            mvprintw(row/2, (col-31)/2+1+19, "/%s", creat_room);
+            is_join = 1;
+        }
+        else if(c == ('E'&0x1f)){ //press right
+            clear();
+            mvprintw(row/2, (col-31)/2+1, "%s","I want to ");
+            mvprintw(row/2, (col-31)/2+1+10, "%s/", join_room);
+            attrset(A_REVERSE | A_UNDERLINE);
+            mvprintw(row/2, (col-31)/2+1+20, "%s", creat_room);
+            attroff(A_REVERSE | A_UNDERLINE);
+            is_join = 0;
+        }
+        else{
+            continue;
+        }
+    }
+
+    len = 0;
+    enter=0;
+    clear();
+    mvprintw(row/2-1, (col-25)/2+1, "%s","please input the room id?");
+    move(row/2, (col-len)/2);
+    while( (c = getch()) ){ //輸入room id
+        enter = 0;
+        if(c == ('G'&0x1f)){ //輸入刪除鍵
+            if(len==0){
+                continue;
+            }
+            room_id[len-1]='\0';
+            len--;
+        }
+        else if(c=='\n'){
+            if(len!=ROOM_ID_LEN){
+                enter = 1;
+            }
+            else{
+                break;
+            }
+        }
+        else if(c<48 || 57<c){
+            continue;
+        }
+        else{
+            if(len<ROOM_ID_LEN){
+                room_id[len]=c;
+                room_id[len+1]='\0';
+            }
+            len++;    
+        }
+
+        clear();
+        mvprintw(row/2-1, (col-25)/2+1, "%s","please input the room id?");
+        if(len==ROOM_ID_LEN+1){
+            // room[4]='\0';
+            mvprintw(row/2+1, (col-25)/2+1, "no more than four numbers");
+            len--;
+        }
+        mvprintw(row/2, (col-len)/2, "<%s>",room_id);
+        if(enter){
+            mvprintw(row/2+1, (col-32)/2+1, "please input exacly four numbers");
+        }
+        refresh();
+    }
+
+    return is_join;
 }
