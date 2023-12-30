@@ -19,4 +19,7 @@
 
 debug
 
-- ERROR on binding: Address already in use: 更改port即可，因為程式結束該port可能不會馬上被電腦free掉
+- ERROR on binding: Address already in use:
+-   更改port即可，因為程式結束該port可能不會馬上被電腦free掉
+- make: *** No rule to make target 'install'.  Stop.
+-   把Makefile的副檔名刪除
