@@ -7,6 +7,7 @@
 #include <netinet/in.h>
 #include <omp.h>
 #include <sys/select.h>
+#include <time.h>
 
 #define USERNAME_LEN 19
 #define ROOM_ID_LEN 4
@@ -17,9 +18,9 @@
 
 
 typedef struct msg{
-     char msgContent[BUFFER_SIZE];
+     char* msgContent;
      time_t msgTime;
-     struct msg *next;
+     struct msg *pre;
 }Message;
 
 typedef struct room{
@@ -27,9 +28,9 @@ typedef struct room{
      int readynum; //設定完基本資料的使用者數量
      int max_fd; //socket的最大值 (socket數值沒有意義，只是不會重複而已)
      int* userfd; //clients的socket陣列
-     char room_id[ROOM_ID_LEN+1]; 
+     // char room_id[ROOM_ID_LEN+1]; 
      char** usernames; //clients的名字陣列
-     Message* msg;
+     Message* msg; //指向最新傳的訊息
 } ROOM;
 
 typedef struct room_node
@@ -54,12 +55,14 @@ ROOM_TABLE* delete_room(ROOM_TABLE* room_table, char* id); // delete room from r
 ROOM* get_room(ROOM_TABLE* room_table, char* id); // 取得給定id的room的地址
 int create_room(ROOM_TABLE** room_table_addr, char* id, ROOM* room); //在room table中新增一個room
 int check_room_exist(ROOM_TABLE* room_table_addr, char* id); // 檢查room有沒有存在於 room table 中
+void change_room(char* room_id, ROOM* origin_room, int idx);
 
 void error(const char *msg) { //  輸出stderr的訊息在msg後面
     perror(msg);
     exit(1);
 }
 
+ROOM_TABLE* room_table;
 int main(int argc, char *argv[]) {
      int serverfd /*socket file description*/, *clientfd=malloc(sizeof(int)), client_num=0;
      socklen_t clilen;
@@ -73,16 +76,16 @@ int main(int argc, char *argv[]) {
      int total_client=0;
      struct timeval timeout = {0, 100000};  // 秒，100000微秒
      //
-     ROOM* chat_rooms;
-     chat_rooms = (ROOM*) malloc(sizeof(ROOM));
-     chat_rooms[0].usernum = 0;
-     chat_rooms[0].readynum = 0;
-     chat_rooms[0].usernames = (char**) malloc(0);
-     chat_rooms[0].userfd = (int*) malloc(0);
-     chat_rooms[0].max_fd = 0;
-     strcpy(chat_rooms[0].room_id,"0000");
+     // ROOM* chat_rooms;
+     // chat_rooms = (ROOM*) malloc(sizeof(ROOM));
+     // chat_rooms[0].usernum = 0;
+     // chat_rooms[0].readynum = 0;
+     // chat_rooms[0].usernames = (char**) malloc(0);
+     // chat_rooms[0].userfd = (int*) malloc(0);
+     // chat_rooms[0].max_fd = 0;
+     // strcpy(chat_rooms[0].room_id,"0000");
      //
-     ROOM_TABLE* room_table = (ROOM_TABLE*) malloc(sizeof(ROOM_TABLE));
+     room_table = (ROOM_TABLE*) malloc(sizeof(ROOM_TABLE));
      room_table->table_size = INIT_ROOM_TABLE_SIZE;
      room_table->num_node = 0;
      room_table->table = (ROOM_NODE**) calloc(INIT_ROOM_TABLE_SIZE, sizeof(ROOM_NODE*));
@@ -113,8 +116,8 @@ int main(int argc, char *argv[]) {
 
      listen(serverfd,5/*backlog:排隊等待連線的最大數量*/); //監聽serverfd
      clilen = sizeof(cli_addr);
-     // omp_set_num_threads(3); //設定平行運算thread的數量
-     #pragma omp parallel /*開始平行運算*/ sections //根據section平行運算，section1和section2同時進行 
+     // omp_set_num_threads(2); //設定平行運算thread的數量
+     #pragma omp parallel/*開始平行運算*/ sections //根據section平行運算，section1和section2同時進行 
      {
      #pragma omp section //處理新增的client
      {
@@ -185,8 +188,10 @@ int main(int argc, char *argv[]) {
                               room->userfd = (int*) malloc(sizeof(int));
                               room->userfd[0] = userfd;
                               room->max_fd = userfd+1;
-                              strcpy(room->room_id, buffer);
-                              room->msg = NULL;
+                              // strcpy(room->room_id, buffer);
+                              // room->msg = (Message*) malloc(sizeof(Message));
+                              // room->msg->pre = NULL;
+                              room->msg=NULL;
                               if(create_room(&room_table, buffer, room)){
                                    printf("room created\n");
                                    n = write(userfd, "200OK", 5);
@@ -209,7 +214,7 @@ int main(int argc, char *argv[]) {
           }
      }
 
-     #pragma omp section //處理client的訊息
+     #pragma omp section //處理client傳入訊息
      {
           fd_set readfds;
           iter_room:
@@ -234,6 +239,8 @@ int main(int argc, char *argv[]) {
           }
           else{
                printf("recieved notification!!\n");
+               timeout.tv_sec=0;
+               timeout.tv_usec=100000;
                goto find_writer;
           }
           // }
@@ -249,19 +256,60 @@ int main(int argc, char *argv[]) {
                               bzero(buffer,BUFFER_SIZE); //將buffer中BUFFER_SIZE大小的空間設為0
                               n = read(tmp_room_node->room->userfd[i],buffer,BUFFER_SIZE-1); //卡在這裡直到收到客戶端的輸入
                               if (n < 0) error("ERROR reading from socket");
-                              printf("%s say %s\n", tmp_room_node->room->usernames[i], buffer);
-                              
-                              for(int j=0;j<tmp_room_node->room->readynum;j++){
-                                   if(i==j){
-                                        continue;
+                              else if(n==0) { //使用者離線
+                                   for(int i=0;i<total_client;i++){
+                                        if(all_clientfd[i] == tmp_room_node->room->userfd[i]){
+                                             all_clientfd[i] = all_clientfd[total_client-1];
+                                             realloc(all_clientfd, --total_client*sizeof(int));
+                                             break;
+                                        }
                                    }
-                                   write(tmp_room_node->room->userfd[j],tmp_room_node->room->usernames[i],strlen(tmp_room_node->room->usernames[i])); //輸出到client端
-                                   if (n < 0) error("ERROR writing to socket");
-                                   write(tmp_room_node->room->userfd[j],": ",strlen(":")); //輸出到client端
-                                   if (n < 0) error("ERROR writing to socket");
-                                   n = write(tmp_room_node->room->userfd[j],buffer,strlen(buffer)); //傳送訊息到客戶端
-                                   if (n < 0) error("ERROR writing to socket");
+                                   strcpy(tmp_room_node->room->usernames[i], tmp_room_node->room->usernames[tmp_room_node->room->usernum-1]);
+                                   free(tmp_room_node->room->usernames[tmp_room_node->room->usernum-1]);
+                                   tmp_room_node->room->usernames = (char**) realloc(tmp_room_node->room->usernames, sizeof(char*)*(tmp_room_node->room->usernum-1));
+                                   tmp_room_node->room->userfd[i] = tmp_room_node->room->userfd[tmp_room_node->room->usernum-1];
+                                   tmp_room_node->room->userfd = (int*) realloc(tmp_room_node->room->userfd, sizeof(char*)*(tmp_room_node->room->usernum-1));
+                                   tmp_room_node->room->readynum--;
+                                   tmp_room_node->room->usernum--;
                               }
+                              else{
+                                   printf("%s say %s\n", tmp_room_node->room->usernames[i], buffer);
+                                   if(!strncmp(buffer, "$$CR", 4)){ //change room
+                                        char room_id[] = "room";
+                                        printf("here %s\n", buffer);
+                                        strncpy(room_id, buffer+5, 4);
+                                        // for(int c=0;c<4;c++){
+                                        //      room_id[c] = buffer[5+c];
+                                        // }
+                                        // room_id[4] = '\0';
+                                        printf("here2\n");
+                                        change_room(room_id, tmp_room_node->room, i);
+                                        printf("here3\n");
+                                   }
+                                   else{
+                                        char* name_msg = (char*) malloc((2+strlen(tmp_room_node->room->usernames[i])+strlen(buffer)));
+                                        strcpy(name_msg, tmp_room_node->room->usernames[i]);
+                                        strcat(name_msg, ":");
+                                        strcat(name_msg, buffer);
+                                        Message* msg = (Message*) malloc(sizeof(Message));
+                                        msg->msgContent = name_msg;
+                                        time(&(msg->msgTime));
+                                        msg->pre = tmp_room_node->room->msg;
+                                        tmp_room_node->room->msg = msg;
+                                        for(int j=0;j<tmp_room_node->room->readynum;j++){
+                                             if(i==j){
+                                                  continue;
+                                             }
+                                             write(tmp_room_node->room->userfd[j],tmp_room_node->room->usernames[i],strlen(tmp_room_node->room->usernames[i])); //輸出到client端
+                                             if (n < 0) error("ERROR writing to socket");
+                                             write(tmp_room_node->room->userfd[j],": ",strlen(":")); //輸出到client端
+                                             if (n < 0) error("ERROR writing to socket");
+                                             n = write(tmp_room_node->room->userfd[j],buffer,strlen(buffer)); //傳送訊息到客戶端
+                                             if (n < 0) error("ERROR writing to socket");
+                                        }
+                                   }
+                              }
+
                          }
                     }
                     tmp_room_node = tmp_room_node->next;
@@ -275,6 +323,43 @@ int main(int argc, char *argv[]) {
      // close(clientfd2);
      close(serverfd);
      return 0; 
+}
+
+void change_room(char* room_id, ROOM* origin_room, int idx){
+     ROOM* new_room;
+     if(check_room_exist(room_table, room_id)){ // 可加入房間
+          new_room = get_room(room_table, room_id);
+          new_room->userfd = (int*) realloc(new_room->userfd, sizeof(int)*++new_room->usernum); //插入client socket
+          new_room->userfd[new_room->usernum-1] = origin_room->userfd[idx];
+          new_room->usernames = (char**) realloc(new_room->usernames, new_room->usernum*sizeof(char*)); //插入client name
+          new_room->usernames[new_room->usernum-1] = malloc(sizeof(char)*(strlen(origin_room->usernames[idx])+1));
+          strcpy(new_room->usernames[new_room->usernum-1], origin_room->usernames[idx]);
+          new_room->max_fd = new_room->max_fd<=new_room->userfd[new_room->usernum-1] ? new_room->userfd[new_room->usernum-1]+1 : new_room->max_fd; // 設定max fd值
+          new_room->readynum++;
+          // n = write(userfd, "200OK", 5);
+          // if(n < 0) error("ERROR writing to socket");
+          int n = write(origin_room->userfd[idx], "200OK\n", 6); //傳送訊息到客戶端
+          if (n < 0) error("ERROR writing to socket");
+
+          strcpy(origin_room->usernames[idx], origin_room->usernames[origin_room->usernum-1]);
+          free(origin_room->usernames[origin_room->usernum-1]);
+          origin_room->usernames = (char**) realloc(origin_room->usernames, sizeof(char*)*(origin_room->usernum-1));
+          origin_room->userfd[idx] = origin_room->userfd[origin_room->usernum-1];
+          origin_room->userfd = (int*) realloc(origin_room->userfd, sizeof(char*)*(origin_room->usernum-1));
+          origin_room->readynum--;
+          origin_room->usernum--;
+     }
+     else{
+          printf("%s not found\n", room_id);
+          char err_msg[38] = "[error] room id \"";
+          strcat(err_msg, room_id);
+          strcat(err_msg, "\" doesn't exist.\n");
+          printf("%s\n", err_msg);
+          int n = write(origin_room->userfd[idx], err_msg, strlen(err_msg)); //傳送訊息到客戶端
+          if (n < 0) error("ERROR writing to socket");
+          // sleep(1);
+          // printf("here?\n");
+     }
 }
 
 int hash(char* key, int ROOM_TABLE_size){
@@ -406,7 +491,7 @@ int check_room_exist(ROOM_TABLE* room_table, char* id){
                return 1; // room has already existed;
           }
           pre_room_node = tmp_room_node;
-          tmp_room_node->next;
+          tmp_room_node = tmp_room_node->next;
      }
     return 0;
 }

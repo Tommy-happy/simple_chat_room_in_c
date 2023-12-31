@@ -28,7 +28,8 @@ int main(int argc, char *argv[]) {
     char username[USERNAME_LEN+1], room_id[ROOM_ID_LEN+1];
     char is_join_str[2];
 
-    char buffer[BUFFER_SIZE];
+    char in_buffer[BUFFER_SIZE];
+    char out_buffer[BUFFER_SIZE];
     if (argc < 3) {
        fprintf(stderr,"usage %s hostname port\n", argv[0]);
        exit(0);
@@ -55,6 +56,7 @@ int main(int argc, char *argv[]) {
     initscr(); //初始化ncurses視窗
     noecho(); //輸入時terminal不會顯示字元
     keypad(stdscr, TRUE); // 启用特殊键盘键输入，如方向键
+    // curs_set(0); //不顯示屬標
 
     get_name(username);
     n = write(serverfd,username,strlen(username)); //傳送給server
@@ -76,16 +78,16 @@ int main(int argc, char *argv[]) {
     // printf("sended %s\n", is_join_str);
 
     //等待server回應加入房間狀況或是創建房間狀況
-    n = read(serverfd,buffer,BUFFER_SIZE); //卡在這裡直到收到伺服端的輸入
+    n = read(serverfd,in_buffer,BUFFER_SIZE); //卡在這裡直到收到伺服端的輸入
     if (n < 0)  error("ERROR reading from socket");
-    if(strncmp(buffer, "200OK", 5)){ //有錯
+    if(strncmp(in_buffer, "200OK", 5)){ //有錯
 
         getmaxyx(stdscr, row, col);
         if(is_join == 1){
             mvprintw(row/2, (col-22)/2+1, "the room doesn't exist");
         }
         else{
-            mvprintw( 0, 0, "%s", buffer);
+            // mvprintw( 0, 0, "%s", in_buffer);
             mvprintw(row/2, (col-27)/2+1, "the room is already existed");
         }
         mvprintw(row/2+1, (col-35)/2+1, "please press any key to continue...");
@@ -101,19 +103,25 @@ int main(int argc, char *argv[]) {
         #pragma omp section //section1
         {    
             // printf("waiting for you to write something...\n");
-            while(fgets(buffer,BUFFER_SIZE-1,stdin)!=NULL){ //讀取std輸入
-                n = write(serverfd,buffer,strlen(buffer)); //傳送給server
+            while(fgets(in_buffer,BUFFER_SIZE-1,stdin)!=NULL){ //讀取std輸入
+                if(strlen(in_buffer) == 1){
+                    continue;
+                }
+                n = write(serverfd,in_buffer,strlen(in_buffer)); //傳送給server
                 if (n < 0)  error("ERROR writing to socket");
                 // printf("I wrote something...\n");
             }
         }
-        #pragma omp section //section2
+        #pragma omp section//section2
         {    
             while(1){ //讀取server輸出
-                bzero(buffer,BUFFER_SIZE-1);
-                n = read(serverfd,buffer,BUFFER_SIZE-1); //卡在這裡直到收到伺服端的輸入
+                bzero(out_buffer,BUFFER_SIZE-1);
+                // printf("recieving... \n");
+                n = read(serverfd,out_buffer,BUFFER_SIZE-1); //卡在這裡直到收到伺服端的輸入
                 if (n < 0)  error("ERROR reading from socket");
-                printf("%s",buffer);
+                else if(n == 0) break;
+                // printf("recieved\n");
+                printf("%s",out_buffer);
             }
         }
     }
