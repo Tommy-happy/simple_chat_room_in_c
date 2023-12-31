@@ -1,5 +1,9 @@
 {
     "files.associations": {
-        "types.h": "c"
-    }
+        "types.h": "c",
+        "type_traits": "c",
+        "xtr1common": "c",
+        "xutility": "c"
+    },
+    // "C_Cpp.errorSquiggles": "disabled"
 }

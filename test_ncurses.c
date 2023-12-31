@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <curses.h>
+#include <ncurses.h>
 #include <string.h>
 
 int get_name_room_id(char[20], char[5]);
@@ -12,26 +12,52 @@ int main(int argc, char** argv){
     char name[20];
     char room_id[5];
     int is_join;
-    // move(row/2, (col)/2);        //(ncurses)移動到指定位置
-    noecho();
+    // noecho();
     keypad(stdscr, TRUE); // 启用特殊键盘键输入，如方向键
-    // bkgd('_');         //調整背景字元
-    is_join = get_name_room_id(name, room_id);
-
-    clear();
-    mvprintw(0, 0, "your name is %s", name);
-    if(is_join){
-        mvprintw(1, 0, "you're going to %s", "join room");
-    }
-    else{
-        mvprintw(1, 0, "you're going to %s", "create room");
-    }
-    mvprintw(2, 0, "your room id is %s", room_id);
+    
+    int scrLine, scrCol, a;
+    printw("Main Menu\n");          // 标准窗口作为主界面 main menu
     refresh();
-    getch();
-    endwin();
+    scr_dump("a");                  // 储存当前标准窗口的内容
 
-    printf("%s\n", name);
+    getch();
+    WINDOW* win = subwin(stdscr, scrLine, scrCol, 0, 0);
+    wclear(stdscr);
+    wprintw(win, "Game Started!\n");     // 一个与标准窗口相同大小的新窗口 win 作为游戏界面
+    wrefresh(win);
+
+    getch();
+    wclear(win);
+    wrefresh(win);                  // 游戏界面结束，将屏幕清空
+    delwin(win);                    // 释放游戏界面所在窗口 win 的内存
+
+    getch();
+    scr_restore("a");               // 返回主界面 main menu, 使用 scr_restore() 恢复
+    getch();
+    refresh();
+    // getmaxyx(stdscr, scrLine, scrCol);
+    // WINDOW* upwin = subwin(stdscr, scrLine / 2, scrCol, 0, 0);
+    // WINDOW* downwin = subwin(stdscr, scrLine / 2, scrCol, scrLine / 2, 0);
+    // box(upwin, '|', '-');
+    // box(downwin, '|', '-');
+ 
+    // mvwprintw(upwin, 1,1, "up screen");
+    // mvwprintw(downwin, 1,1, "down screen");
+
+    // getch();
+    // wclear(downwin);
+    // wrefresh(downwin);
+    // getch();
+    // box(downwin, '|', '-');
+    // getmaxyx(stdscr, scrLine, scrCol);
+    // mvwprintw(downwin, 1,1, "stdwin: row=%d\tcol=%d", scrLine, scrCol);
+    // getmaxyx(downwin, scrLine, scrCol);
+    // mvwprintw(downwin, 2,1, "down:   row=%d\tcol=%d", scrLine, scrCol);
+    // // wrefresh(downwin);
+    // mvwprintw(upwin, 1,1, "renew up window");
+    // touchwin(stdscr); 
+    // getch();
+    endwin();
 }
 
 int get_name_room_id(char name[20], char room[5]){

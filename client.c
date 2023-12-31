@@ -7,13 +7,14 @@
 #include <netinet/in.h>
 #include <netdb.h> 
 #include <omp.h>
-#include <curses.h>
+#include <ncurses.h>
 
 #define BUFFER_SIZE 256
 #define USERNAME_LEN 19
 #define ROOM_ID_LEN 4
 
-int get_name_room_id(char[USERNAME_LEN], char[ROOM_ID_LEN+1]);
+void get_name(char name[USERNAME_LEN+1]);
+int get_room_id(char[ROOM_ID_LEN+1]);
 
 void error(const char *msg) { //輸出錯誤訊息
     perror(msg); //輸出msg和stderr的內容
@@ -21,10 +22,11 @@ void error(const char *msg) { //輸出錯誤訊息
 }
 
 int main(int argc, char *argv[]) {
-    int serverfd /*socket file description*/, portno, n;
+    int serverfd /*socket file description*/, portno, n, is_join, col, row;
     struct sockaddr_in serv_addr; //server地址等資訊
     struct hostent *server;
-    char username[USERNAME_LEN+1], room_id[ROOM_ID_LEN+1], is_join;
+    char username[USERNAME_LEN+1], room_id[ROOM_ID_LEN+1];
+    char is_join_str[2];
 
     char buffer[BUFFER_SIZE];
     if (argc < 3) {
@@ -53,16 +55,45 @@ int main(int argc, char *argv[]) {
     initscr(); //初始化ncurses視窗
     noecho(); //輸入時terminal不會顯示字元
     keypad(stdscr, TRUE); // 启用特殊键盘键输入，如方向键
-    is_join = get_name_room_id(username, room_id); //取得client username、創建或加入房間、room id
-    endwin(); //結束ncurses視窗
 
+    get_name(username);
     n = write(serverfd,username,strlen(username)); //傳送給server
     if (n < 0)  error("ERROR writing to socket");
-    printf("sended %s\n", username);
+    // printf("sended %s\n", username);
     sleep(0.1);
-    n = write(serverfd,room_id,strlen(room_id)); //傳送給server
+
+    type_room_id:{}
+    is_join = get_room_id(room_id); //取得client username、創建或加入房間、room id
+    // mvprintw(0,0,"sended %s\n", room_id);
+    sprintf(is_join_str,"%d", is_join);
+    n = write(serverfd,is_join_str,1); //傳送給server
     if (n < 0)  error("ERROR writing to socket");
-    printf("sended %s\n", room_id);
+    sleep(0.1);
+    // mvprintw(0, 0, "is_join=%d\nis_join_str=%s", is_join, is_join_str);
+
+    n = write(serverfd,room_id,strlen(room_id)+1); //傳送給server
+    if (n < 0)  error("ERROR writing to socket");
+    // printf("sended %s\n", is_join_str);
+
+    //等待server回應加入房間狀況或是創建房間狀況
+    n = read(serverfd,buffer,BUFFER_SIZE); //卡在這裡直到收到伺服端的輸入
+    if (n < 0)  error("ERROR reading from socket");
+    if(strncmp(buffer, "200OK", 5)){ //有錯
+
+        getmaxyx(stdscr, row, col);
+        if(is_join == 1){
+            mvprintw(row/2, (col-22)/2+1, "the room doesn't exist");
+        }
+        else{
+            mvprintw( 0, 0, "%s", buffer);
+            mvprintw(row/2, (col-27)/2+1, "the room is already existed");
+        }
+        mvprintw(row/2+1, (col-35)/2+1, "please press any key to continue...");
+        getch();
+        clear();
+        goto type_room_id;
+    }
+    endwin(); //結束ncurses視窗
 
     omp_set_num_threads(2); //設定平行運算thread的數量
     #pragma omp parallel /*開始平行運算*/ sections //根據section平行運算，section1和section2同時進行 
@@ -91,7 +122,7 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-int get_name_room_id(char name[USERNAME_LEN+1], char room_id[ROOM_ID_LEN+1]){
+void get_name(char name[USERNAME_LEN+1]){
     int row, col;
     int len=0;
     char c;
@@ -157,7 +188,16 @@ int get_name_room_id(char name[USERNAME_LEN+1], char room_id[ROOM_ID_LEN+1]){
         mvprintw(row/2, (col-len)/2, "<%s>",name);
         refresh();
     }
+    clear();
+}
 
+int get_room_id(char room_id[ROOM_ID_LEN+1]){
+    int row, col;
+    int len=0;
+    char c;
+    int enter; //有沒有按enter
+    
+    getmaxyx(stdscr, row, col);  //(ncurses)得目前terminal的長和寬
 
     char join_room[] = "join room"; //len=9
     char creat_room[] = "create room"; //len=11
@@ -168,7 +208,7 @@ int get_name_room_id(char name[USERNAME_LEN+1], char room_id[ROOM_ID_LEN+1]){
     mvprintw(row/2, (col-31)/2+1+10, "%s", join_room);
     attroff(A_REVERSE | A_UNDERLINE);
     mvprintw(row/2, (col-31)/2+1+19, "/%s", creat_room);
-    while( (c = getch()) != '\n'){ //輸入名字
+    while( (c = getch()) != '\n'){ //選擇是否join
         if(c == ('D'&0x1f)){ //press left
             clear();
             mvprintw(row/2, (col-31)/2+1, "%s","I want to ");
@@ -195,7 +235,8 @@ int get_name_room_id(char name[USERNAME_LEN+1], char room_id[ROOM_ID_LEN+1]){
     len = 0;
     enter=0;
     clear();
-    mvprintw(row/2-1, (col-25)/2+1, "%s","please input the room id?");
+    bzero(room_id, ROOM_ID_LEN+1);
+    mvprintw(row/2-1, (col-24)/2+1, "%s","please input the room id");
     move(row/2, (col-len)/2);
     while( (c = getch()) ){ //輸入room id
         enter = 0;
@@ -232,12 +273,15 @@ int get_name_room_id(char name[USERNAME_LEN+1], char room_id[ROOM_ID_LEN+1]){
             mvprintw(row/2+1, (col-25)/2+1, "no more than four numbers");
             len--;
         }
-        mvprintw(row/2, (col-len)/2, "<%s>",room_id);
+        if(len){
+            mvprintw(row/2, (col-len)/2, "<%s>",room_id);
+        }
         if(enter){
             mvprintw(row/2+1, (col-32)/2+1, "please input exacly four numbers");
         }
         refresh();
     }
+    clear();
 
     return is_join;
 }
