@@ -159,22 +159,6 @@ void get_name(char name[USERNAME_LEN+1]){
         else if(c<32 || 126<c){
             continue;
         }
-        // else if(c == ('C'&0x1f)){
-        //     strcpy(name, "you pressed up");
-        //     break;
-        // }
-        // else if(c == ('B'&0x1f)){
-        //     strcpy(name, "you pressed down");
-        //     break;
-        // }
-        // else if(c == ('E'&0x1f)){
-        //     strcpy(name, "you pressed right");
-        //     break;
-        // }
-        // else if(c == ('D'&0x1f)){
-        //     strcpy(name, "you pressed left");
-        //     break;
-        // }
         else{
             if(len<USERNAME_LEN){
                 name[len]=c;
